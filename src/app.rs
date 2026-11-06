@@ -185,6 +185,22 @@ impl eframe::App for MyApp {
                     );
                 });
 
+            if self.is_scanning {
+                panel_ui.add_space(8.0);
+                panel_ui.horizontal(|ui| {
+                    ui.add(
+                        egui::Spinner::new()
+                            .size(16.0)
+                            .color(egui::Color32::from_rgb(125, 211, 252))
+                    );
+
+                    ui.label(
+                        egui::RichText::new("Scanning directory...")
+                            .color(egui::Color32::from_rgb(148, 163, 184))
+                    );
+                });
+            }
+
             if let Some(error) = &self.scan_error{
                 panel_ui.colored_label(egui::Color32::RED, error);
             }
@@ -394,21 +410,6 @@ impl eframe::App for MyApp {
                 }
             });
 
-            if self.is_scanning{
-                panel_ui.add_space(8.0);
-                panel_ui.horizontal(|ui| {
-                    ui.add(
-                        egui::Spinner::new()
-                            .size(16.0)
-                            .color(egui::Color32::from_rgb(125, 211, 252))
-                    );
-
-                    ui.label(
-                        egui::RichText::new("Scanning directory...")
-                            .color(egui::Color32::from_rgb(148, 163, 184))
-                    );
-                });
-            }
         });
     }
 }
