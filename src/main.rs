@@ -16,7 +16,7 @@ fn main() {
         "Directory Footprint",
         native_options,
         Box::new(|cc| Ok(Box::new(MyApp::new(cc))))
-    ).expect("TODO: panic message");
+    ).expect("Failed to start eframe");
 }
 
 

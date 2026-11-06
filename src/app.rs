@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::mpsc::{Receiver, channel};
 use eframe::egui;
 use egui_extras::{Column, TableBuilder};
 use crate::scanner::{scan_directory, ScanResult};
@@ -8,6 +9,8 @@ pub struct MyApp{
     current_dir: Option<PathBuf>,
     scan_result: Option<ScanResult>,
     scan_error: Option<String>,
+    is_scanning: bool,
+    scan_receiver: Option<Receiver<Result<ScanResult, std::io::Error>>>,
 }
 impl MyApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self{
@@ -60,6 +63,39 @@ impl MyApp {
 
 impl eframe::App for MyApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame){
+        if let Some(receiver) = self.scan_receiver.take(){
+            match receiver.try_recv(){
+                Ok(result) => {
+                    self.is_scanning = false;
+
+                    match result{
+                        Ok(scan_result ) => {
+                            self.scan_result = Some(scan_result);
+                            self.scan_error = None;
+                        },
+                        Err(e) => {
+                            self.scan_result = None;
+                            self.scan_error = Some(format!("Error scanning directory: {}", e));
+                        }
+                    }
+                },
+                Err(std::sync::mpsc::TryRecvError::Empty) => {
+                    self.scan_receiver = Some(receiver);
+                },
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    self.is_scanning = false;
+                    self.scan_error = Some("Scan thread disconnected unexpectedly".to_string());
+                }
+
+            }
+        }
+
+        if self.is_scanning {
+            ui.ctx().request_repaint_after(
+                std::time::Duration::from_millis(100)
+            );
+        }
+
         egui::CentralPanel::default().show(ui, |panel_ui|{
             panel_ui.heading("Directory Footprint");
             panel_ui.separator();
@@ -90,24 +126,26 @@ impl eframe::App for MyApp {
                         row_size,
                         egui::Layout::right_to_left(egui::Align::Center),
                         |ui|{
-                            let scan_enabled = self.current_dir.is_some();
+                            let scan_enabled = self.current_dir.is_some() && !self.is_scanning;
 
                             if ui.add_enabled(scan_enabled, egui::Button::new("Scan")).clicked(){
-                                if let Some(dir) = self.current_dir.as_deref(){
-                                    match scan_directory(dir){
-                                        Ok(result) =>{
-                                            self.scan_result = Some(result);
-                                            self.scan_error = None;
-                                        },
-                                        Err(e) => {
-                                            self.scan_result = None;
-                                            self.scan_error = Some(format!("Error scanning directory: {}", e));
-                                        }
-                                    }
+                                if let Some(dir) = self.current_dir.clone(){
+                                    let (sender, receiver) = channel();
+
+                                    let ctx = ui.ctx().clone();
+
+                                    self.scan_receiver = Some(receiver);
+                                    self.is_scanning = true;
+
+                                    std::thread::spawn(move ||{
+                                        let result = scan_directory(&dir);
+                                        let _ = sender.send(result);
+                                        ctx.request_repaint();
+                                    });
                                 }
                             }
 
-                            if ui.button("Browse").clicked() {
+                            if ui.add_enabled(!self.is_scanning, egui::Button::new("Browse")).clicked(){
                                 if let Some(path) = rfd::FileDialog::new().pick_folder() {
                                     if self.current_dir.as_ref() != Some(&path) {
                                         self.scan_result = None;
@@ -355,6 +393,22 @@ impl eframe::App for MyApp {
                     });
                 }
             });
+
+            if self.is_scanning{
+                panel_ui.add_space(8.0);
+                panel_ui.horizontal(|ui| {
+                    ui.add(
+                        egui::Spinner::new()
+                            .size(16.0)
+                            .color(egui::Color32::from_rgb(125, 211, 252))
+                    );
+
+                    ui.label(
+                        egui::RichText::new("Scanning directory...")
+                            .color(egui::Color32::from_rgb(148, 163, 184))
+                    );
+                });
+            }
         });
     }
 }

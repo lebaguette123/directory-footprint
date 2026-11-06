@@ -714,6 +714,7 @@ dependencies = [
  "eframe",
  "egui_extras",
  "rfd",
+ "tempfile",
 ]
 
 [[package]]

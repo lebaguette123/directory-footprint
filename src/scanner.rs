@@ -79,11 +79,35 @@ fn scan_into(path: &Path, result: &mut ScanResult) -> std::io::Result<()>{
 mod tests{
     use super::*;
 
+    fn create_test_file(path: &Path, size: u64) {
+        let file = fs::File::create(path).unwrap();
+        file.set_len(size).unwrap();
+    }
+
     #[test]
     fn test_directory_scan(){
-        let path = std::env::temp_dir().join("DirectoryFootprintTest");
+        let temp_dir = tempfile::tempdir().unwrap();
+        let root = temp_dir.path();
 
-        let result = scan_directory(&path).unwrap();
+        fs::create_dir(root.join("Images")).unwrap();
+        fs::create_dir(root.join("Media")).unwrap();
+
+        create_test_file(&root.join("notes.txt"), 100);
+        create_test_file(&root.join("archive.zip"), 2048);
+        create_test_file(&root.join("README"), 512);
+        create_test_file(&root.join("Images/photo.JPG"), 1024);
+        create_test_file(&root.join("Media/video.mp4"), 4096);
+
+        let sizes = [8192, 7168, 6144, 5120, 3072, 2560, 1536, 768];
+
+        for (i, size) in sizes.iter().enumerate() {
+            create_test_file(
+                &root.join(format!("extra-{}.dat", i + 1)),
+                *size,
+            );
+        }
+
+        let result = scan_directory(root).unwrap();
 
         assert_eq!(result.total_size, 42340);
         assert_eq!(result.file_count, 13);
